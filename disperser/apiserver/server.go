@@ -271,7 +271,7 @@ func (s *DispersalServer) disperseBlob(ctx context.Context, blob *core.Blob, aut
 
 	s.logger.Debug("received a new blob dispersal request", "authenticatedAddress", authenticatedAddress, "origin", origin, "blobSizeBytes", blobSize, "securityParams", strings.Join(securityParamsStrings, ", "))
 
-	fmt.Println("ratelimiter:", s.ratelimiter == nil)
+	s.ratelimiter = nil
 	//if s.ratelimiter != nil {
 	//	err := s.checkRateLimitsAndAddRatesToHeader(ctx, blob, origin, authenticatedAddress, apiMethodName)
 	//	if err != nil {
