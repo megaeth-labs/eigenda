@@ -14,8 +14,8 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/wealdtech/go-merkletree"
-	"github.com/wealdtech/go-merkletree/keccak256"
+	"github.com/wealdtech/go-merkletree/v2"
+	"github.com/wealdtech/go-merkletree/v2/keccak256"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -48,6 +48,20 @@ func (h *BatchHeader) SetBatchRoot(blobHeaders []*BlobHeader) (*merkletree.Merkl
 		leafs[i] = leaf[:]
 	}
 
+	tree, err := merkletree.NewTree(merkletree.WithData(leafs), merkletree.WithHashType(keccak256.New()))
+	if err != nil {
+		return nil, err
+	}
+
+	copy(h.BatchRoot[:], tree.Root())
+	return tree, nil
+}
+
+func (h *BatchHeader) SetBatchRootFromBlobHeaderHashes(blobHeaderHashes [][32]byte) (*merkletree.MerkleTree, error) {
+	leafs := make([][]byte, len(blobHeaderHashes))
+	for i, hash := range blobHeaderHashes {
+		leafs[i] = hash[:]
+	}
 	tree, err := merkletree.NewTree(merkletree.WithData(leafs), merkletree.WithHashType(keccak256.New()))
 	if err != nil {
 		return nil, err

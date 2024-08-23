@@ -142,7 +142,7 @@ func TestEncodingQueueLimit(t *testing.T) {
 }
 
 func TestBatchTrigger(t *testing.T) {
-	encodingStreamer, c := createEncodingStreamer(t, 10, 20_000, streamerConfig)
+	encodingStreamer, c := createEncodingStreamer(t, 10, 30_000, streamerConfig)
 
 	blob := makeTestBlob([]*core.SecurityParam{{
 		QuorumID:              0,
@@ -160,7 +160,7 @@ func TestBatchTrigger(t *testing.T) {
 	assert.Nil(t, err)
 	count, size := encodingStreamer.EncodedBlobstore.GetEncodedResultSize()
 	assert.Equal(t, count, 1)
-	assert.Equal(t, size, uint64(16384))
+	assert.Equal(t, size, uint64(26630))
 
 	// try encode the same blobs again at different block (this happens when the blob is retried)
 	encodingStreamer.ReferenceBlockNumber = 11
@@ -171,7 +171,7 @@ func TestBatchTrigger(t *testing.T) {
 
 	count, size = encodingStreamer.EncodedBlobstore.GetEncodedResultSize()
 	assert.Equal(t, count, 1)
-	assert.Equal(t, size, uint64(16384))
+	assert.Equal(t, size, uint64(26630))
 
 	// don't notify yet
 	select {
@@ -190,7 +190,7 @@ func TestBatchTrigger(t *testing.T) {
 
 	count, size = encodingStreamer.EncodedBlobstore.GetEncodedResultSize()
 	assert.Equal(t, count, 2)
-	assert.Equal(t, size, uint64(16384)*2)
+	assert.Equal(t, size, uint64(26630)*2)
 
 	// notify
 	select {
@@ -246,12 +246,12 @@ func TestStreamingEncoding(t *testing.T) {
 	assert.NotNil(t, encodedResult.Commitment.LengthProof)
 	assert.Greater(t, encodedResult.Commitment.Length, uint(0))
 	assert.Len(t, encodedResult.Assignments, numOperators)
-	assert.Len(t, encodedResult.Chunks, 32)
+	assert.Len(t, encodedResult.ChunksData.Chunks, 32)
 	isRequested = encodingStreamer.EncodedBlobstore.HasEncodingRequested(metadataKey, core.QuorumID(0), 10)
 	assert.True(t, isRequested)
 	count, size = encodingStreamer.EncodedBlobstore.GetEncodedResultSize()
 	assert.Equal(t, count, 1)
-	assert.Equal(t, size, uint64(16384))
+	assert.Equal(t, size, uint64(26630))
 
 	// Cancel previous blob so it doesn't get reencoded.
 	err = c.blobStore.MarkBlobFailed(ctx, metadataKey)
@@ -281,7 +281,7 @@ func TestStreamingEncoding(t *testing.T) {
 	assert.True(t, isRequested)
 	count, size = encodingStreamer.EncodedBlobstore.GetEncodedResultSize()
 	assert.Equal(t, count, 1)
-	assert.Equal(t, size, uint64(16384))
+	assert.Equal(t, size, uint64(26630))
 
 	// Request the same blob, which should be dedupped
 	_, err = c.blobStore.StoreBlob(ctx, &blob, requestedAt)
@@ -292,7 +292,7 @@ func TestStreamingEncoding(t *testing.T) {
 	// It should not have been added to the encoded blob store
 	count, size = encodingStreamer.EncodedBlobstore.GetEncodedResultSize()
 	assert.Equal(t, count, 1)
-	assert.Equal(t, size, uint64(16384))
+	assert.Equal(t, size, uint64(26630))
 }
 
 func TestEncodingFailure(t *testing.T) {
@@ -445,7 +445,7 @@ func TestPartialBlob(t *testing.T) {
 
 	// Check EncodedBlobs
 	assert.Len(t, batch.EncodedBlobs, 1)
-	assert.Len(t, batch.EncodedBlobs[0].BundlesByOperator, numOperators)
+	assert.Len(t, batch.EncodedBlobs[0].EncodedBundlesByOperator, numOperators)
 
 	encodedBlob1 := batch.EncodedBlobs[0]
 	assert.NotNil(t, encodedBlob1)
@@ -465,10 +465,10 @@ func TestPartialBlob(t *testing.T) {
 	}})
 
 	assert.Contains(t, batch.BlobHeaders, encodedBlob1.BlobHeader)
-	assert.Len(t, encodedBlob1.BundlesByOperator, numOperators)
-	for _, bundles := range encodedBlob1.BundlesByOperator {
+	assert.Len(t, encodedBlob1.EncodedBundlesByOperator, numOperators)
+	for _, bundles := range encodedBlob1.EncodedBundlesByOperator {
 		assert.Len(t, bundles, 1)
-		assert.Greater(t, len(bundles[0]), 0)
+		assert.Greater(t, len(bundles[0].Chunks), 0)
 		break
 	}
 
@@ -674,7 +674,7 @@ func TestGetBatch(t *testing.T) {
 
 	// Check EncodedBlobs
 	assert.Len(t, batch.EncodedBlobs, 2)
-	assert.Len(t, batch.EncodedBlobs[0].BundlesByOperator, numOperators)
+	assert.Len(t, batch.EncodedBlobs[0].EncodedBundlesByOperator, numOperators)
 
 	var encodedBlob1 core.EncodedBlob
 	var encodedBlob2 core.EncodedBlob
@@ -718,10 +718,10 @@ func TestGetBatch(t *testing.T) {
 	})
 
 	assert.Contains(t, batch.BlobHeaders, encodedBlob1.BlobHeader)
-	for _, bundles := range encodedBlob1.BundlesByOperator {
+	for _, bundles := range encodedBlob1.EncodedBundlesByOperator {
 		assert.Len(t, bundles, 2)
-		assert.Greater(t, len(bundles[0]), 0)
-		assert.Greater(t, len(bundles[1]), 0)
+		assert.Greater(t, len(bundles[0].Chunks), 0)
+		assert.Greater(t, len(bundles[1].Chunks), 0)
 		break
 	}
 
@@ -739,9 +739,177 @@ func TestGetBatch(t *testing.T) {
 		},
 		ChunkLength: 8,
 	}})
-	for _, bundles := range encodedBlob2.BundlesByOperator {
+	for _, bundles := range encodedBlob2.EncodedBundlesByOperator {
 		assert.Len(t, bundles, 1)
-		assert.Greater(t, len(bundles[core.QuorumID(2)]), 0)
+		assert.Greater(t, len(bundles[core.QuorumID(2)].Chunks), 0)
+		break
+	}
+	assert.Len(t, batch.BlobHeaders, 2)
+	assert.Len(t, batch.BlobMetadata, 2)
+	assert.Contains(t, batch.BlobMetadata, metadata1)
+	assert.Contains(t, batch.BlobMetadata, metadata2)
+}
+
+func TestCreateMinibatch(t *testing.T) {
+	encodingStreamer, c := createEncodingStreamer(t, 10, 1e12, streamerConfig)
+	ctx := context.Background()
+
+	// put 2 blobs in the blobstore
+	blob1 := makeTestBlob([]*core.SecurityParam{{
+		QuorumID:              0,
+		AdversaryThreshold:    80,
+		ConfirmationThreshold: 100,
+	}, {
+		QuorumID:              1,
+		AdversaryThreshold:    70,
+		ConfirmationThreshold: 95,
+	}})
+	blob2 := makeTestBlob([]*core.SecurityParam{{
+		QuorumID:              2,
+		AdversaryThreshold:    75,
+		ConfirmationThreshold: 100,
+	}})
+	metadataKey1, err := c.blobStore.StoreBlob(ctx, &blob1, uint64(time.Now().UnixNano()))
+	assert.Nil(t, err)
+	metadata1, err := c.blobStore.GetBlobMetadata(ctx, metadataKey1)
+	assert.Nil(t, err)
+	assert.Equal(t, disperser.Processing, metadata1.BlobStatus)
+	metadataKey2, err := c.blobStore.StoreBlob(ctx, &blob2, uint64(time.Now().UnixNano()))
+	assert.Nil(t, err)
+	metadata2, err := c.blobStore.GetBlobMetadata(ctx, metadataKey2)
+	assert.Nil(t, err)
+	assert.Equal(t, disperser.Processing, metadata2.BlobStatus)
+
+	// request encoding
+	out := make(chan batcher.EncodingResultOrStatus)
+	err = encodingStreamer.RequestEncoding(context.Background(), out)
+	assert.Nil(t, err)
+	isRequested := encodingStreamer.EncodedBlobstore.HasEncodingRequested(metadataKey1, core.QuorumID(0), 10)
+	assert.True(t, isRequested)
+	isRequested = encodingStreamer.EncodedBlobstore.HasEncodingRequested(metadataKey1, core.QuorumID(1), 10)
+	assert.True(t, isRequested)
+	isRequested = encodingStreamer.EncodedBlobstore.HasEncodingRequested(metadataKey2, core.QuorumID(2), 10)
+	assert.True(t, isRequested)
+
+	err = encodingStreamer.ProcessEncodedBlobs(context.Background(), <-out)
+	assert.Nil(t, err)
+	err = encodingStreamer.ProcessEncodedBlobs(context.Background(), <-out)
+	assert.Nil(t, err)
+	err = encodingStreamer.ProcessEncodedBlobs(context.Background(), <-out)
+	assert.Nil(t, err)
+	encodingStreamer.Pool.StopWait()
+
+	isRequested = encodingStreamer.EncodedBlobstore.HasEncodingRequested(metadataKey1, core.QuorumID(0), 10)
+	assert.True(t, isRequested)
+	isRequested = encodingStreamer.EncodedBlobstore.HasEncodingRequested(metadataKey1, core.QuorumID(1), 10)
+	assert.True(t, isRequested)
+	isRequested = encodingStreamer.EncodedBlobstore.HasEncodingRequested(metadataKey2, core.QuorumID(2), 10)
+	assert.True(t, isRequested)
+
+	// get batch
+	assert.Equal(t, encodingStreamer.ReferenceBlockNumber, uint(10))
+	batch, err := encodingStreamer.CreateMinibatch(context.Background())
+	assert.Nil(t, err)
+	assert.NotNil(t, batch)
+	assert.Equal(t, encodingStreamer.ReferenceBlockNumber, uint(10))
+	metadata1, err = c.blobStore.GetBlobMetadata(ctx, metadataKey1)
+	assert.Nil(t, err)
+	assert.Equal(t, disperser.Dispersing, metadata1.BlobStatus)
+	metadata2, err = c.blobStore.GetBlobMetadata(ctx, metadataKey2)
+	assert.Equal(t, disperser.Dispersing, metadata2.BlobStatus)
+	assert.Nil(t, err)
+	res, err := encodingStreamer.EncodedBlobstore.GetEncodingResult(metadataKey1, core.QuorumID(0))
+	assert.Nil(t, res)
+	assert.ErrorContains(t, err, "GetEncodedBlob: no such key")
+	res, err = encodingStreamer.EncodedBlobstore.GetEncodingResult(metadataKey1, core.QuorumID(1))
+	assert.Nil(t, res)
+	assert.ErrorContains(t, err, "GetEncodedBlob: no such key")
+	res, err = encodingStreamer.EncodedBlobstore.GetEncodingResult(metadataKey2, core.QuorumID(0))
+	assert.Nil(t, res)
+	assert.ErrorContains(t, err, "GetEncodedBlob: no such key")
+
+	err = encodingStreamer.UpdateReferenceBlock(15)
+	assert.Nil(t, err)
+	assert.Equal(t, encodingStreamer.ReferenceBlockNumber, uint(15))
+
+	// Check BatchHeader
+	assert.NotNil(t, batch.BatchHeader)
+	assert.Greater(t, len(batch.BatchHeader.BatchRoot), 0)
+	assert.Equal(t, batch.BatchHeader.ReferenceBlockNumber, uint(10))
+
+	// Check State
+	assert.NotNil(t, batch.State)
+
+	// Check EncodedBlobs
+	assert.Len(t, batch.EncodedBlobs, 2)
+	assert.Len(t, batch.EncodedBlobs[0].EncodedBundlesByOperator, numOperators)
+
+	var encodedBlob1 core.EncodedBlob
+	var encodedBlob2 core.EncodedBlob
+	for i := range batch.BlobHeaders {
+		blobHeader := batch.BlobHeaders[i]
+		if len(blobHeader.QuorumInfos) > 1 {
+			encodedBlob1 = batch.EncodedBlobs[i]
+			// batch.EncodedBlobs and batch.BlobMetadata should be in the same order
+			assert.ElementsMatch(t, batch.BlobMetadata[i].RequestMetadata.SecurityParams, blob1.RequestHeader.SecurityParams)
+		} else {
+			encodedBlob2 = batch.EncodedBlobs[i]
+			assert.ElementsMatch(t, batch.BlobMetadata[i].RequestMetadata.SecurityParams, blob2.RequestHeader.SecurityParams)
+		}
+	}
+	assert.NotNil(t, encodedBlob1)
+	assert.NotNil(t, encodedBlob2)
+
+	assert.NotNil(t, encodedBlob1.BlobHeader)
+	assert.NotNil(t, encodedBlob1.BlobHeader.BlobCommitments)
+	assert.NotNil(t, encodedBlob1.BlobHeader.BlobCommitments.Commitment)
+	assert.NotNil(t, encodedBlob1.BlobHeader.BlobCommitments.LengthProof)
+	assert.Equal(t, encodedBlob1.BlobHeader.BlobCommitments.Length, uint(48))
+	assert.Len(t, encodedBlob1.BlobHeader.QuorumInfos, 2)
+	assert.ElementsMatch(t, encodedBlob1.BlobHeader.QuorumInfos, []*core.BlobQuorumInfo{
+		{
+			SecurityParam: core.SecurityParam{
+				QuorumID:              0,
+				AdversaryThreshold:    80,
+				ConfirmationThreshold: 100,
+			},
+			ChunkLength: 16,
+		},
+		{
+			SecurityParam: core.SecurityParam{
+				QuorumID:              1,
+				AdversaryThreshold:    70,
+				ConfirmationThreshold: 95,
+			},
+			ChunkLength: 8,
+		},
+	})
+
+	assert.Contains(t, batch.BlobHeaders, encodedBlob1.BlobHeader)
+	for _, bundles := range encodedBlob1.EncodedBundlesByOperator {
+		assert.Len(t, bundles, 2)
+		assert.Greater(t, len(bundles[0].Chunks), 0)
+		assert.Greater(t, len(bundles[1].Chunks), 0)
+		break
+	}
+
+	assert.NotNil(t, encodedBlob2.BlobHeader)
+	assert.NotNil(t, encodedBlob2.BlobHeader.BlobCommitments)
+	assert.NotNil(t, encodedBlob2.BlobHeader.BlobCommitments.Commitment)
+	assert.NotNil(t, encodedBlob2.BlobHeader.BlobCommitments.LengthProof)
+	assert.Equal(t, encodedBlob2.BlobHeader.BlobCommitments.Length, uint(48))
+	assert.Len(t, encodedBlob2.BlobHeader.QuorumInfos, 1)
+	assert.ElementsMatch(t, encodedBlob2.BlobHeader.QuorumInfos, []*core.BlobQuorumInfo{{
+		SecurityParam: core.SecurityParam{
+			QuorumID:              2,
+			AdversaryThreshold:    75,
+			ConfirmationThreshold: 100,
+		},
+		ChunkLength: 8,
+	}})
+	for _, bundles := range encodedBlob2.EncodedBundlesByOperator {
+		assert.Len(t, bundles, 1)
+		assert.Greater(t, len(bundles[core.QuorumID(2)].Chunks), 0)
 		break
 	}
 	assert.Len(t, batch.BlobHeaders, 2)

@@ -2,13 +2,14 @@ package clients
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/Layr-Labs/eigenda/api/grpc/node"
+	grpcnode "github.com/Layr-Labs/eigenda/api/grpc/node"
 	"github.com/Layr-Labs/eigenda/core"
 	"github.com/Layr-Labs/eigenda/encoding"
-	node_utils "github.com/Layr-Labs/eigenda/node/grpc"
-	"github.com/wealdtech/go-merkletree"
+	"github.com/Layr-Labs/eigenda/node"
+	"github.com/wealdtech/go-merkletree/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -49,11 +50,11 @@ func (c client) GetBlobHeader(
 	}
 	defer conn.Close()
 
-	n := node.NewRetrievalClient(conn)
+	n := grpcnode.NewRetrievalClient(conn)
 	nodeCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	request := &node.GetBlobHeaderRequest{
+	request := &grpcnode.GetBlobHeaderRequest{
 		BatchHeaderHash: batchHeaderHash[:],
 		BlobIndex:       blobIndex,
 	}
@@ -63,7 +64,7 @@ func (c client) GetBlobHeader(
 		return nil, nil, err
 	}
 
-	blobHeader, err := node_utils.GetBlobHeaderFromProto(reply.GetBlobHeader())
+	blobHeader, err := node.GetBlobHeaderFromProto(reply.GetBlobHeader())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -98,11 +99,11 @@ func (c client) GetChunks(
 		return
 	}
 
-	n := node.NewRetrievalClient(conn)
+	n := grpcnode.NewRetrievalClient(conn)
 	nodeCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	request := &node.RetrieveChunksRequest{
+	request := &grpcnode.RetrieveChunksRequest{
 		BatchHeaderHash: batchHeaderHash[:],
 		BlobIndex:       blobIndex,
 		QuorumId:        uint32(quorumID),
@@ -120,7 +121,24 @@ func (c client) GetChunks(
 
 	chunks := make([]*encoding.Frame, len(reply.GetChunks()))
 	for i, data := range reply.GetChunks() {
-		chunk, err := new(encoding.Frame).Deserialize(data)
+		var chunk *encoding.Frame
+		switch reply.GetChunkEncodingFormat() {
+		case grpcnode.ChunkEncodingFormat_GNARK:
+			chunk, err = new(encoding.Frame).DeserializeGnark(data)
+		case grpcnode.ChunkEncodingFormat_GOB:
+			chunk, err = new(encoding.Frame).Deserialize(data)
+		case grpcnode.ChunkEncodingFormat_UNKNOWN:
+			// For backward compatibility, we fallback the UNKNOWN to GOB
+			chunk, err = new(encoding.Frame).Deserialize(data)
+			if err != nil {
+				chunksChan <- RetrievedChunks{
+					OperatorID: opID,
+					Err:        errors.New("UNKNOWN chunk encoding format"),
+					Chunks:     nil,
+				}
+				return
+			}
+		}
 		if err != nil {
 			chunksChan <- RetrievedChunks{
 				OperatorID: opID,

@@ -15,32 +15,33 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/ejector/operators": {
-            "post": {
+        "/feed/batches/{batch_header_hash}/blobs": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Ejector"
+                    "Feed"
                 ],
-                "summary": "Eject operators who violate the SLAs during the given time interval",
+                "summary": "Fetch blob metadata by batch header hash",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "description": "Lookback window for operator ejection [default: 86400]",
-                        "name": "interval",
-                        "in": "query"
+                        "type": "string",
+                        "description": "Batch Header Hash",
+                        "name": "batch_header_hash",
+                        "in": "path",
+                        "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "End time for evaluating operator ejection [default: now]",
-                        "name": "end",
+                        "description": "Limit [default: 10]",
+                        "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Whether it's periodic or urgent ejection request [default: periodic]",
-                        "name": "mode",
+                        "description": "Next page token",
+                        "name": "next_token",
                         "in": "query"
                     }
                 ],
@@ -48,7 +49,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dataapi.EjectionResponse"
+                            "$ref": "#/definitions/dataapi.BlobsResponse"
                         }
                     },
                     "400": {
@@ -702,14 +703,6 @@ const docTemplate = `{
                 }
             }
         },
-        "dataapi.EjectionResponse": {
-            "type": "object",
-            "properties": {
-                "transaction_hash": {
-                    "type": "string"
-                }
-            }
-        },
         "dataapi.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -721,6 +714,9 @@ const docTemplate = `{
         "dataapi.Meta": {
             "type": "object",
             "properties": {
+                "next_token": {
+                    "type": "string"
+                },
                 "size": {
                     "type": "integer"
                 }

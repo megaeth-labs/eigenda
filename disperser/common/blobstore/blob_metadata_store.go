@@ -27,19 +27,24 @@ const (
 //   - StatusIndex: (Partition Key: Status, Sort Key: RequestedAt) -> Metadata
 //   - BatchIndex: (Partition Key: BatchHeaderHash, Sort Key: BlobIndex) -> Metadata
 type BlobMetadataStore struct {
-	dynamoDBClient *commondynamodb.Client
-	logger         logging.Logger
-	tableName      string
-	ttl            time.Duration
+	dynamoDBClient  *commondynamodb.Client
+	logger          logging.Logger
+	tableName       string
+	shadowTableName string
+	ttl             time.Duration
 }
 
-func NewBlobMetadataStore(dynamoDBClient *commondynamodb.Client, logger logging.Logger, tableName string, ttl time.Duration) *BlobMetadataStore {
+func NewBlobMetadataStore(dynamoDBClient *commondynamodb.Client, logger logging.Logger, tableName string, shadowTableName string, ttl time.Duration) *BlobMetadataStore {
 	logger.Debugf("creating blob metadata store with table %s with TTL: %s", tableName, ttl)
+	if shadowTableName != "" {
+		logger.Debugf("shadow blob metadata will be written to table %s with TTL: %s", shadowTableName, ttl)
+	}
 	return &BlobMetadataStore{
-		dynamoDBClient: dynamoDBClient,
-		logger:         logger.With("component", "BlobMetadataStore"),
-		tableName:      tableName,
-		ttl:            ttl,
+		dynamoDBClient:  dynamoDBClient,
+		logger:          logger.With("component", "BlobMetadataStore"),
+		tableName:       tableName,
+		shadowTableName: shadowTableName,
+		ttl:             ttl,
 	}
 }
 
@@ -47,6 +52,13 @@ func (s *BlobMetadataStore) QueueNewBlobMetadata(ctx context.Context, blobMetada
 	item, err := MarshalBlobMetadata(blobMetadata)
 	if err != nil {
 		return err
+	}
+
+	if s.shadowTableName != "" && s.shadowTableName != s.tableName {
+		err = s.dynamoDBClient.PutItem(ctx, s.shadowTableName, item)
+		if err != nil {
+			s.logger.Error("failed to put item into shadow table %s : %v", s.shadowTableName, err)
+		}
 	}
 
 	return s.dynamoDBClient.PutItem(ctx, s.tableName, item)
@@ -118,6 +130,9 @@ func (s *BlobMetadataStore) GetBlobMetadataByStatusCount(ctx context.Context, st
 
 // GetBlobMetadataByStatusWithPagination returns all the metadata with the given status upto the specified limit
 // along with items, also returns a pagination token that can be used to fetch the next set of items
+//
+// Note that this may not return all the metadata for the batch if dynamodb query limit is reached.
+// e.g 1mb limit for a single query
 func (s *BlobMetadataStore) GetBlobMetadataByStatusWithPagination(ctx context.Context, status disperser.BlobStatus, limit int32, exclusiveStartKey *disperser.BlobStoreExclusiveStartKey) ([]*disperser.BlobMetadata, *disperser.BlobStoreExclusiveStartKey, error) {
 
 	var attributeMap map[string]types.AttributeValue
@@ -189,6 +204,72 @@ func (s *BlobMetadataStore) GetAllBlobMetadataByBatch(ctx context.Context, batch
 	}
 
 	return metadatas, nil
+}
+
+// GetBlobMetadataByStatusWithPagination returns all the metadata with the given status upto the specified limit
+// along with items, also returns a pagination token that can be used to fetch the next set of items
+//
+// Note that this may not return all the metadata for the batch if dynamodb query limit is reached.
+// e.g 1mb limit for a single query
+func (s *BlobMetadataStore) GetAllBlobMetadataByBatchWithPagination(
+	ctx context.Context,
+	batchHeaderHash [32]byte,
+	limit int32,
+	exclusiveStartKey *disperser.BatchIndexExclusiveStartKey,
+) ([]*disperser.BlobMetadata, *disperser.BatchIndexExclusiveStartKey, error) {
+	var attributeMap map[string]types.AttributeValue
+	var err error
+
+	// Convert the exclusive start key to a map of AttributeValue
+	if exclusiveStartKey != nil {
+		attributeMap, err = convertToAttribMapBatchIndex(exclusiveStartKey)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	queryResult, err := s.dynamoDBClient.QueryIndexWithPagination(
+		ctx,
+		s.tableName,
+		batchIndexName,
+		"BatchHeaderHash = :batch_header_hash",
+		commondynamodb.ExpresseionValues{
+			":batch_header_hash": &types.AttributeValueMemberB{
+				Value: batchHeaderHash[:],
+			},
+		},
+		limit,
+		attributeMap,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	s.logger.Info("Query result", "items", len(queryResult.Items), "lastEvaluatedKey", queryResult.LastEvaluatedKey)
+	// When no more results to fetch, the LastEvaluatedKey is nil
+	if queryResult.Items == nil && queryResult.LastEvaluatedKey == nil {
+		return nil, nil, nil
+	}
+
+	metadata := make([]*disperser.BlobMetadata, len(queryResult.Items))
+	for i, item := range queryResult.Items {
+		metadata[i], err = UnmarshalBlobMetadata(item)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	lastEvaluatedKey := queryResult.LastEvaluatedKey
+	if lastEvaluatedKey == nil {
+		return metadata, nil, nil
+	}
+
+	// Convert the last evaluated key to a disperser.BatchIndexExclusiveStartKey
+	exclusiveStartKey, err = convertToExclusiveStartKeyBatchIndex(lastEvaluatedKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	return metadata, exclusiveStartKey, nil
 }
 
 func (s *BlobMetadataStore) GetBlobMetadataInBatch(ctx context.Context, batchHeaderHash [32]byte, blobIndex uint32) (*disperser.BlobMetadata, error) {
@@ -456,7 +537,30 @@ func convertToExclusiveStartKey(exclusiveStartKeyMap map[string]types.AttributeV
 	return &blobStoreExclusiveStartKey, nil
 }
 
+func convertToExclusiveStartKeyBatchIndex(exclusiveStartKeyMap map[string]types.AttributeValue) (*disperser.BatchIndexExclusiveStartKey, error) {
+	blobStoreExclusiveStartKey := disperser.BatchIndexExclusiveStartKey{}
+	err := attributevalue.UnmarshalMap(exclusiveStartKeyMap, &blobStoreExclusiveStartKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &blobStoreExclusiveStartKey, nil
+}
+
 func convertToAttribMap(blobStoreExclusiveStartKey *disperser.BlobStoreExclusiveStartKey) (map[string]types.AttributeValue, error) {
+	if blobStoreExclusiveStartKey == nil {
+		// Return an empty map or nil
+		return nil, nil
+	}
+
+	avMap, err := attributevalue.MarshalMap(blobStoreExclusiveStartKey)
+	if err != nil {
+		return nil, err
+	}
+	return avMap, nil
+}
+
+func convertToAttribMapBatchIndex(blobStoreExclusiveStartKey *disperser.BatchIndexExclusiveStartKey) (map[string]types.AttributeValue, error) {
 	if blobStoreExclusiveStartKey == nil {
 		// Return an empty map or nil
 		return nil, nil

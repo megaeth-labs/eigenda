@@ -46,8 +46,9 @@ type SharedBlobStore struct {
 }
 
 type Config struct {
-	BucketName string
-	TableName  string
+	BucketName      string
+	TableName       string
+	ShadowTableName string
 }
 
 // This represents the s3 fetch result for a blob.
@@ -239,6 +240,10 @@ func (s *SharedBlobStore) GetMetadataInBatch(ctx context.Context, batchHeaderHas
 
 func (s *SharedBlobStore) GetAllBlobMetadataByBatch(ctx context.Context, batchHeaderHash [32]byte) ([]*disperser.BlobMetadata, error) {
 	return s.blobMetadataStore.GetAllBlobMetadataByBatch(ctx, batchHeaderHash)
+}
+
+func (s *SharedBlobStore) GetAllBlobMetadataByBatchWithPagination(ctx context.Context, batchHeaderHash [32]byte, limit int32, exclusiveStartKey *disperser.BatchIndexExclusiveStartKey) ([]*disperser.BlobMetadata, *disperser.BatchIndexExclusiveStartKey, error) {
+	return s.blobMetadataStore.GetAllBlobMetadataByBatchWithPagination(ctx, batchHeaderHash, limit, exclusiveStartKey)
 }
 
 // GetMetadata returns a blob metadata given a metadata key

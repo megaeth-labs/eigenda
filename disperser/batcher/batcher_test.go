@@ -227,7 +227,7 @@ func TestBatcherIterations(t *testing.T) {
 	assert.NoError(t, err)
 	count, size := components.encodingStreamer.EncodedBlobstore.GetEncodedResultSize()
 	assert.Equal(t, 2, count)
-	assert.Equal(t, uint64(24576), size) // Robert checks it
+	assert.Equal(t, uint64(27631), size)
 
 	txn := types.NewTransaction(0, gethcommon.Address{}, big.NewInt(0), 0, big.NewInt(0), nil)
 	components.transactor.On("BuildConfirmBatchTxn", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -750,4 +750,60 @@ func TestBlobAttestationFailures2(t *testing.T) {
 	// Test with receipt response with error
 	err = batcher.HandleSingleBatch(ctx)
 	assert.NoError(t, err)
+}
+
+func TestBatcherRecoverState(t *testing.T) {
+	blob0 := makeTestBlob([]*core.SecurityParam{
+		{
+			QuorumID:              0,
+			AdversaryThreshold:    80,
+			ConfirmationThreshold: 100,
+		},
+		{
+			QuorumID:              2,
+			AdversaryThreshold:    80,
+			ConfirmationThreshold: 50,
+		},
+	})
+
+	blob1 := makeTestBlob([]*core.SecurityParam{
+		{
+			QuorumID:              0,
+			AdversaryThreshold:    80,
+			ConfirmationThreshold: 100,
+		},
+		{
+			QuorumID:              2,
+			AdversaryThreshold:    80,
+			ConfirmationThreshold: 100,
+		},
+	})
+
+	components, batcher, _ := makeBatcher(t)
+
+	blobStore := components.blobStore
+	ctx := context.Background()
+	_, key1 := queueBlob(t, ctx, &blob0, blobStore)
+	_, _ = queueBlob(t, ctx, &blob1, blobStore)
+
+	err := blobStore.MarkBlobDispersing(ctx, key1)
+	assert.NoError(t, err)
+	processingBlobs, err := blobStore.GetBlobMetadataByStatus(ctx, disperser.Processing)
+	assert.NoError(t, err)
+	assert.Len(t, processingBlobs, 1)
+
+	dispersingBlobs, err := blobStore.GetBlobMetadataByStatus(ctx, disperser.Dispersing)
+	assert.NoError(t, err)
+	assert.Len(t, dispersingBlobs, 1)
+
+	err = batcher.RecoverState(context.Background())
+	assert.NoError(t, err)
+
+	processingBlobs, err = blobStore.GetBlobMetadataByStatus(ctx, disperser.Processing)
+	assert.NoError(t, err)
+	assert.Len(t, processingBlobs, 2)
+
+	dispersingBlobs, err = blobStore.GetBlobMetadataByStatus(ctx, disperser.Dispersing)
+	assert.NoError(t, err)
+	assert.Len(t, dispersingBlobs, 0)
 }
