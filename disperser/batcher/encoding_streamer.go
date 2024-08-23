@@ -661,7 +661,6 @@ func (e *EncodingStreamer) CreateBatch(ctx context.Context) (*batch, error) {
 	}
 
 	for blobKey, metadata := range metadataByKey {
-		e.logger.Info("MegaETH create batch with blobKey", "Info", fmt.Sprintf("%s-%s", metadata.BlobHash, metadata.MetadataHash))
 		quorumPresent := make(map[core.QuorumID]bool)
 		for _, quorum := range blobQuorums[blobKey] {
 			quorumPresent[quorum.QuorumID] = true

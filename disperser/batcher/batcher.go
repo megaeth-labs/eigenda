@@ -313,7 +313,6 @@ func (b *Batcher) updateConfirmationInfo(
 		if status == disperser.Confirmed {
 			if _, updateConfirmationInfoErr = b.Queue.MarkBlobConfirmed(ctx, metadata, confirmationInfo); updateConfirmationInfoErr == nil {
 				b.Metrics.UpdateCompletedBlob(int(metadata.RequestMetadata.BlobSize), disperser.Confirmed)
-				b.logger.Info("MegaETH confirm Blob", "info", fmt.Sprintf("%s-%s", metadata.BlobHash, metadata.MetadataHash))
 			}
 		} else if status == disperser.InsufficientSignatures {
 			if _, updateConfirmationInfoErr = b.Queue.MarkBlobInsufficientSignatures(ctx, metadata, confirmationInfo); updateConfirmationInfoErr == nil {

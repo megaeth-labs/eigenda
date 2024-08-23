@@ -271,9 +271,7 @@ func (s *DispersalServer) disperseBlob(ctx context.Context, blob *core.Blob, aut
 
 	s.logger.Debug("received a new blob dispersal request", "authenticatedAddress", authenticatedAddress, "origin", origin, "blobSizeBytes", blobSize, "securityParams", strings.Join(securityParamsStrings, ", "))
 
-	fmt.Println("debug00000000000000000000000000000")
-	fmt.Println("de:", s.ratelimiter == nil)
-	fmt.Println("debug00000000000000000000000000000")
+	fmt.Println("ratelimiter:", s.ratelimiter == nil)
 	//if s.ratelimiter != nil {
 	//	err := s.checkRateLimitsAndAddRatesToHeader(ctx, blob, origin, authenticatedAddress, apiMethodName)
 	//	if err != nil {
@@ -284,7 +282,6 @@ func (s *DispersalServer) disperseBlob(ctx context.Context, blob *core.Blob, aut
 
 	requestedAt := uint64(time.Now().UnixNano())
 	metadataKey, err := s.blobStore.StoreBlob(ctx, blob, requestedAt)
-	s.logger.Info("MegaETH store blob with metadataKey", "info", fmt.Sprintf("%s-%s", metadataKey.BlobHash, metadataKey.MetadataHash))
 	if err != nil {
 		for _, param := range securityParams {
 			quorumId := string(param.QuorumID)
