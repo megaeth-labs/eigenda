@@ -2,8 +2,11 @@ module eigenda_tx_send
 
 go 1.22.2
 
+require external/common v1.1.0
+
+replace external/common v1.1.0 => ../common
+
 require (
-	external/common v1.1.0
 	github.com/Layr-Labs/eigenda v0.8.1
 	github.com/streadway/amqp v1.1.0
 )
@@ -87,5 +90,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
-
-replace external/common v1.1.0 => ../common
