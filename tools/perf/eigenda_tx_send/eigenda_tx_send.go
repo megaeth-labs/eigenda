@@ -143,7 +143,6 @@ func main() {
 
 							lastRequestId = requestId
 
-							fmt.Println("debug00000000, requestId:", requestId)
 							body.RequestId = requestId
 							body.ReceiveRequestTime = time.Now().Unix()
 
