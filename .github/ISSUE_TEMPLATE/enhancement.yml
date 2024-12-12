@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Something could be better?
+        Could something be better?
         If your request is about a net new feature please use the Feature Request template.
         Enhancements are tagged `enhancement`.
   - type: textarea
@@ -26,7 +26,7 @@ body:
   - type: textarea
     attributes:
       label: Solution proposal
-      description: Any idea on the how?
+      description: Any idea how?
     validations:
       required: false
   - type: textarea
