@@ -31,7 +31,7 @@ set -euo pipefail
 #
 # It's meant to be used manually or as a pre-commit hook.
 #
-# Place it some where in your code tree and execute it.
+# Place it somewhere in your code tree and execute it.
 # If your tests pass, next to the script you'll find
 # the coverage.html report and coverage.svg badge.
 #
@@ -54,7 +54,7 @@ SCRIPT_DIR="$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")"
 OUT_DIR="${1-$SCRIPT_DIR}"
 
 # OUT_FILE="$(mktemp)"
-# # Get coverage for all packages in the current directory; store next to script.
+# # Get coverage for all packages in the current directory; store them next to the script.
 # go test -short ./...  -coverprofile "$OUT_FILE"
 
 OUT_FILE="coverage.out"
@@ -87,11 +87,11 @@ else
 	COLOR=red
 fi
 
-# Download the badge; store next to script.
+# Download the badge; store it next to the script.
 curl -s "https://img.shields.io/badge/coverage-$COVERAGE%25-$COLOR" > "$OUT_DIR/coverage.svg"
 
 if [[ "${INPUT_CHART-false}" == "true" ]]; then
-	# Download the chart; store next to script.
+	# Download the chart; store it next to the script.
 	curl -s -H "Content-Type: text/plain" --data-binary "@$OUT_DIR/coverage.log" \
 		https://go-coverage-report.nunocruces.workers.dev/chart/ > \
 		"$OUT_DIR/coverage-chart.svg"
