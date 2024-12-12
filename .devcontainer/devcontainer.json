@@ -34,7 +34,7 @@
 				"go.gopath": "/go"
 			},
 
-			// Add the IDs of extensions you want installed when the container is created.
+			// Add the IDs of extensions you want to be installed when the container is created.
 			"extensions": [
 				"golang.Go",
 				"NomicFoundation.hardhat-solidity"
