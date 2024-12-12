@@ -94,7 +94,7 @@ func (m EigenDAClient) GetBlob(ctx context.Context, batchHeaderHash []byte, blob
 }
 
 // PutBlob encodes and writes a blob to EigenDA, waiting for it to be finalized
-// before returning. This function is resiliant to transient failures and
+// before returning. This function is resilient to transient failures and
 // timeouts.
 func (m EigenDAClient) PutBlob(ctx context.Context, data []byte) (*grpcdisperser.BlobInfo, error) {
 	resultChan, errorChan := m.PutBlobAsync(ctx, data)
