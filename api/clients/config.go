@@ -17,19 +17,19 @@ type EigenDAClientConfig struct {
 	// The amount of time to wait between status queries of a newly dispersed blob
 	StatusQueryRetryInterval time.Duration
 
-	// The total amount of time that the client will waiting for a response from the EigenDA disperser
+	// The total amount of time that the client will be waiting for a response from the EigenDA disperser
 	ResponseTimeout time.Duration
 
 	// The quorum IDs to write blobs to using this client. Should not include default quorums 0 or 1.
 	CustomQuorumIDs []uint
 
-	// Signer private key in hex encoded format. This key should not be associated with an Ethereum address holding any funds.
+	// Signer private key in hex-encoded format. This key should not be associated with an Ethereum address holding any funds.
 	SignerPrivateKeyHex string
 
 	// Whether to disable TLS for an insecure connection when connecting to a local EigenDA disperser instance.
 	DisableTLS bool
 
-	// The blob encoding version to use when writing blobs from the high level interface.
+	// The blob encoding version to use when writing blobs from the high-level interface.
 	PutBlobEncodingVersion codecs.BlobEncodingVersion
 
 	// Point verification mode does an IFFT on data before it is written, and does an FFT on data after it is read.
