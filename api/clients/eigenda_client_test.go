@@ -501,7 +501,7 @@ func TestPutBlobTotalTimeout(t *testing.T) {
 	}
 	blobInfo, err := eigendaClient.PutBlob(context.Background(), []byte("hello"))
 
-	// should timeout even though it would have finalized eventually
+	// should timeout even though it would have been finalized eventually
 	require.Error(t, err)
 	require.Nil(t, blobInfo)
 }
